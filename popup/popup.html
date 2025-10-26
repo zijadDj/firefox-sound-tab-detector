@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Sound Detector</title>
+    <style>
+        :root {
+            --bg: #0b1020;
+            --card: #121833;
+            --card-hover: #182045;
+            --text: #e6e8ef;
+            --subtle: #9aa3b2;
+            --border: #243055;
+            --brand: #6ea8fe;
+            --brand-strong: #4c86ff;
+            --success: #4cc38a;
+            --danger: #ff6b6b;
+            --muted: #3a435f;
+            --shadow: 0 6px 16px rgba(0,0,0,0.25);
+        }
+
+        html, body {
+            width: 320px;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(180deg, #0b1020, #0e1430 70%);
+            color: var(--text);
+            font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        }
+
+        body { padding: 12px; }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #1a2244, #111a38);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            font-weight: 700;
+            letter-spacing: 0.2px;
+        }
+
+        .header .logo {
+            width: 26px;
+            height: 26px;
+            display: grid;
+            place-items: center;
+            border-radius: 6px;
+            background: radial-gradient(ellipse at top left, var(--brand), var(--brand-strong));
+            color: #08112b;
+            font-size: 16px;
+        }
+
+        .header .title { font-size: 14px; }
+
+        #tabs-container { display: grid; gap: 10px; }
+
+        .tab-item {
+            border: 1px solid var(--border);
+            background: var(--card);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            transition: transform .14s ease, background-color .14s ease, border-color .14s ease;
+        }
+
+        .tab-item:hover { transform: translateY(-1px); background: var(--card-hover); border-color: #2d3a66; }
+
+        .tab-content { cursor: pointer; padding: 10px 12px 6px; }
+        .tab-content:hover { background: transparent; }
+
+        .tab-title {
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 13px;
+        }
+        .tab-url {
+            font-size: 11px;
+            color: var(--subtle);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tab-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: flex-end;
+            padding: 8px 12px 12px;
+            border-top: 1px dashed var(--border);
+        }
+
+        .tab-info { flex: 1; color: var(--subtle); font-size: 11px; }
+
+        .control-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--brand);
+            color: #071022;
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 6px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .2px;
+            transition: transform .08s ease, background-color .14s ease, box-shadow .14s ease;
+            box-shadow: 0 2px 0 rgba(0,0,0,0.2);
+        }
+        .control-button:hover { background: var(--brand-strong); transform: translateY(-1px); }
+        .control-button:active { transform: translateY(0); }
+        .control-button:disabled { background: var(--muted); color: #cdd3df; cursor: not-allowed; }
+
+        /* Make distinct emphasis for different actions using existing classes */
+        .pause-btn { background: var(--success); }
+        .pause-btn:hover { background: #3cb179; }
+        .mute-btn { background: var(--danger); color: #fff; }
+        .mute-btn:hover { background: #ff4d4d; }
+
+        .no-tabs, .loading {
+            text-align: center;
+            color: var(--subtle);
+            padding: 24px 10px;
+            font-size: 13px;
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🎵</div>
+        <div class="title">Media Control Center</div>
+    </div>
+    <div id="tabs-container">
+        <div class="loading">Loading...</div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
+</html>
