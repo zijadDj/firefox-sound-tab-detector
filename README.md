@@ -1,0 +1,1 @@
+# firefox-sound-tab-detector
