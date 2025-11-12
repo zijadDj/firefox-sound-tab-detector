@@ -1,5 +1,139 @@
+// Keep track of the last update time and current tabs
+let lastUpdateTime = 0;
+let currentTabs = [];
+const MIN_UPDATE_INTERVAL = 100; // 100ms between updates
+let backgroundPort = null;
+const tabsContainer = document.getElementById('tabs-container');
+
+// Function to check if we should update the tabs list
+function shouldUpdateTabs() {
+    const now = Date.now();
+    if (now - lastUpdateTime > MIN_UPDATE_INTERVAL) {
+        lastUpdateTime = now;
+        return true;
+    }
+    return false;
+}
+
+// Function to escape HTML to prevent XSS
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+        .toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Function to render tabs
+function renderTabs(mediaTabs) {
+    if (!tabsContainer) return;
+    
+    if (mediaTabs && mediaTabs.length > 0) {
+        tabsContainer.innerHTML = '';
+        mediaTabs.forEach(tab => {
+            const tabItem = document.createElement('div');
+            tabItem.className = 'tab-item';
+            tabItem.innerHTML = `
+                <div class="tab-content">
+                    <div class="tab-title">${escapeHtml(tab.title)}</div>
+                    <div class="tab-url">${escapeHtml(tab.url)}</div>
+                </div>
+                <div class="tab-controls">
+                    <button class="control-button prev-btn" data-tab-id="${tab.id}" title="Previous Track">⏮️</button>
+                    <button class="control-button pause-btn" data-tab-id="${tab.id}">${tab.isPlaying ? '⏸️ Pause' : '▶️ Play'}</button>
+                    <button class="control-button next-btn" data-tab-id="${tab.id}" title="Next Track">⏭️</button>
+                    <button class="control-button mute-btn" data-tab-id="${tab.id}">${tab.muted ? '🔊 Unmute' : '🔇 Mute'}</button>
+                </div>
+            `;
+
+            const tabContent = tabItem.querySelector('.tab-content');
+            tabContent.addEventListener('click', () => {
+                browser.tabs.update(tab.id, { active: true });
+                window.close();
+            });
+
+            const prevBtn = tabItem.querySelector('.prev-btn');
+            const pauseBtn = tabItem.querySelector('.pause-btn');
+            const nextBtn = tabItem.querySelector('.next-btn');
+            const muteBtn = tabItem.querySelector('.mute-btn');
+
+            prevBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await skipTrack(tab.id, 'prev', prevBtn);
+            });
+
+            pauseBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await toggleTabPlayPause(tab.id, pauseBtn);
+            });
+
+            nextBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await skipTrack(tab.id, 'next', nextBtn);
+            });
+
+            muteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await toggleTabMute(tab.id, muteBtn);
+            });
+
+            tabsContainer.appendChild(tabItem);
+        });
+    } else {
+        tabsContainer.innerHTML = '<div class="no-tabs">🔇 No tabs with media found</div>';
+    }
+}
+
+// Function to update tabs list with new data
+function updateTabs(tabs) {
+    if (!tabs || !Array.isArray(tabs)) return;
+    currentTabs = tabs;
+    renderTabs(currentTabs);
+}
+
+// Connect to background script
+function connectToBackground() {
+    if (backgroundPort) {
+        return;
+    }
+    
+    try {
+        backgroundPort = browser.runtime.connect({ name: 'popup' });
+        
+        backgroundPort.onMessage.addListener((message) => {
+            if (message.command === 'update_media_tabs' && message.tabs) {
+                updateTabs(message.tabs);
+            }
+        });
+        
+        backgroundPort.onDisconnect.addListener(() => {
+            backgroundPort = null;
+        });
+    } catch (error) {
+        console.error('Error connecting to background:', error);
+        backgroundPort = null;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const tabsContainer = document.getElementById('tabs-container');
+    
+    // Connect to background script
+    connectToBackground();
+    
+    // Add visibility change listener to refresh when popup is reopened
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            updateTabsList();
+            // Reconnect if needed
+            if (!backgroundPort) {
+                connectToBackground();
+            }
+        }
+    });
 
     function renderTabs(mediaTabs) {
         if (mediaTabs && mediaTabs.length > 0) {
@@ -56,6 +190,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         } else {
             tabsContainer.innerHTML = '<div class="no-tabs">🔇 No tabs with media found</div>';
+        }
+    }
+
+    // Function to update the tabs list
+    async function updateTabsList() {
+        if (!shouldUpdateTabs()) return;
+        
+        try {
+            // If we have a connection, the background will push updates to us
+            // Otherwise, fall back to the old method
+            if (!backgroundPort) {
+                const response = await browser.runtime.sendMessage({ command: 'get_media_tabs' });
+                if (response && response.tabs) {
+                    updateTabs(response.tabs);
+                }
+            } else {
+                // Request an immediate update
+                backgroundPort.postMessage({ command: 'request_update' });
+            }
+        } catch (error) {
+            console.error('Error updating tabs list:', error);
+            // Try to reconnect if we get an error
+            if (error.message.includes("disconnected")) {
+                backgroundPort = null;
+                connectToBackground();
+            }
         }
     }
 

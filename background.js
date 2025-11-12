@@ -26,12 +26,47 @@ function upsertFromTab(tab) {
     }
 }
 
+// Track connected popup ports
+const popupPorts = new Set();
+
+// Handle popup connection
+browser.runtime.onConnect.addListener(port => {
+    if (port.name === 'popup') {
+        popupPorts.add(port);
+        
+        // Send current state immediately when popup connects
+        const tabs = Array.from(audibleTabsMap.values());
+        port.postMessage({
+            command: 'update_media_tabs',
+            tabs: tabs
+        });
+        
+        port.onDisconnect.addListener(() => {
+            popupPorts.delete(port);
+        });
+    }
+});
+
+// Function to push updates to all connected popups
 function pushUpdateToPopup() {
-    const tabs = getAudibleTabs();
-    try {
-        browser.runtime.sendMessage({ command: 'audible_tabs_changed', tabs });
-    } catch (_) {
-        // Ignore if no listeners (e.g., popup closed)
+    if (popupPorts.size === 0) {
+        return; // No popups are open
+    }
+    
+    const tabs = Array.from(audibleTabsMap.values());
+    const message = {
+        command: 'update_media_tabs',
+        tabs: tabs
+    };
+    
+    // Send to all connected popups
+    for (const port of popupPorts) {
+        try {
+            port.postMessage(message);
+        } catch (error) {
+            console.error('Error sending update to popup:', error);
+            popupPorts.delete(port);
+        }
     }
 }
 
@@ -124,9 +159,49 @@ browser.runtime.onMessage.addListener((message, sender) => {
                 console.error('Failed to inject content script:', injectError);
                 throw new Error('Failed to inject content script: ' + injectError.message);
             });
-        }).then(result => {
+        }).then(async (result) => {
             if (result && result.success) {
                 console.log(`Successfully skipped ${message.direction} track using method:`, result.method);
+                
+                // Force update the tab information
+                try {
+                    // Get the latest tab info
+                    const tab = await browser.tabs.get(message.tabId);
+                    if (tab) {
+                        // Update our cache with the latest tab info
+                        const updateType = upsertFromTab(tab);
+                        if (updateType) {
+                            console.log(`Tab ${tab.id} ${updateType} in cache`);
+                        }
+                        
+                        // Force a title update by querying the tab's title
+                        const updatedTab = await browser.tabs.get(message.tabId);
+                        if (updatedTab) {
+                            // Update the cache again with the latest title
+                            audibleTabsMap.set(updatedTab.id, {
+                                ...audibleTabsMap.get(updatedTab.id) || {},
+                                title: updatedTab.title,
+                                url: updatedTab.url
+                            });
+                            
+                            // Push the update to popup
+                            pushUpdateToPopup();
+                            
+                            // Request a title update from the content script
+                            try {
+                                await browser.tabs.sendMessage(message.tabId, {
+                                    command: 'update_title'
+                                });
+                            } catch (e) {
+                                // Content script might not be loaded, that's okay
+                                console.log('Could not update title via content script:', e);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error updating tab info after skip:', e);
+                }
+                
                 return { success: true, method: result.method };
             }
             const error = result?.error || 'No supported track skipping method found';
