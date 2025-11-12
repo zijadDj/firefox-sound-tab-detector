@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "name": "Sound Detector",
+  "name": "ZX Sound Detector",
   "version": "1.0",
   "description": "Lists all tabs with media and provides play/pause/mute controls.",
   "permissions": [
@@ -14,10 +14,10 @@
   "browser_action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
-      "16": "icons/icon-16.png",
-      "32": "icons/icon-32.png"
+      "16": "icons/apple-touch-icon.png",
+      "32": "icons/apple-touch-icon.png"
     },
-    "default_title": "Sound Detector"
+    "default_title": "ZX Sound Detector"
   },
   "background": {
     "scripts": ["background.js"]
@@ -31,6 +31,6 @@
     }
   ],
   "icons": {
-    "48": "icons/icon-48.png"
+    "48": "icons/apple-touch-icon.png"
   }
 }

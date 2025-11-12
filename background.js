@@ -100,8 +100,8 @@ function pushUpdateToPopup() {
 async function updateIconForMediaTabs() {
     console.log("updateIconForMediaTabs called.");
     const count = getAudibleTabs().length;
-    const iconOnPath = "icons/icon-sound-on-48.png";
-    const iconOffPath = "icons/icon-sound-off-48.png";
+    const iconOnPath = "icons/apple-touch-icon.png";
+    const iconOffPath = "icons/apple-touch-icon.png";
     if (count > 0) {
         browser.browserAction.setIcon({ path: iconOnPath });
         browser.browserAction.setTitle({ title: `${count} tab(s) playing sound` });
