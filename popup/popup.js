@@ -42,10 +42,10 @@ function renderTabs(mediaTabs) {
                     <div class="tab-url">${escapeHtml(tab.url)}</div>
                 </div>
                 <div class="tab-controls">
-                    <button class="control-button prev-btn" data-tab-id="${tab.id}" title="Previous Track">⏮️</button>
-                    <button class="control-button pause-btn" data-tab-id="${tab.id}">${tab.isPlaying ? '⏸️ Pause' : '▶️ Play'}</button>
-                    <button class="control-button next-btn" data-tab-id="${tab.id}" title="Next Track">⏭️</button>
-                    <button class="control-button mute-btn" data-tab-id="${tab.id}">${tab.muted ? '🔊 Unmute' : '🔇 Mute'}</button>
+                    <button class="control-button prev-btn" data-tab-id="${tab.id}" title="Previous Track"></button>
+                    <button class="control-button pause-btn" data-tab-id="${tab.id}">${tab.isPlaying ? 'Pause' : 'Play'}</button>
+                    <button class="control-button next-btn" data-tab-id="${tab.id}" title="Next Track"></button>
+                    <button class="control-button mute-btn" data-tab-id="${tab.id}">${tab.muted ? 'Unmute' : 'Mute'}</button>
                 </div>
             `;
 
@@ -148,10 +148,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     </div>
                     <div class="tab-controls">
                         <div class="tab-info"></div>
-                        <button class="control-button prev-btn" data-tab-id="${tab.id}" title="Previous Track">⏮️</button>
-                        <button class="control-button pause-btn" data-tab-id="${tab.id}">⏸️ Pause</button>
-                        <button class="control-button next-btn" data-tab-id="${tab.id}" title="Next Track">⏭️</button>
-                        <button class="control-button mute-btn" data-tab-id="${tab.id}">🔇 Mute</button>
+                        <button class="control-button prev-btn" data-tab-id="${tab.id}" title="Previous Track"></button>
+                        <button class="control-button pause-btn" data-tab-id="${tab.id}"> Pause</button>
+                        <button class="control-button next-btn" data-tab-id="${tab.id}" title="Next Track"></button>
+                        <button class="control-button mute-btn" data-tab-id="${tab.id}"> Mute</button>
                     </div>
                 `;
 
@@ -166,8 +166,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const nextBtn = tabItem.querySelector('.next-btn');
                 const muteBtn = tabItem.querySelector('.mute-btn');
 
-                pauseBtn.textContent = tab.isPlaying ? '⏸️ Pause' : '▶️ Play';
-                muteBtn.textContent = tab.muted ? '🔊 Unmute' : '🔇 Mute';
+                pauseBtn.textContent = tab.isPlaying ? ' Pause' : ' Play';
+                muteBtn.textContent = tab.muted ? 'Unmute' : ' Mute';
 
                 prevBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
@@ -278,7 +278,7 @@ async function toggleTabPlayPause(tabId, button) {
         
         if (result.success) {
             // Update button text based on new state
-            button.textContent = result.isPlaying ? '⏸️ Pause' : '▶️ Play';
+            button.textContent = result.isPlaying ? 'Pause' : 'Play';
             console.log(`Popup: Tab ${tabId} is now ${result.isPlaying ? 'playing' : 'paused'}`);
         } else {
             console.error(`Popup: Failed to toggle play/pause for tab ${tabId}:`, result.error);
@@ -313,7 +313,7 @@ async function skipTrack(tabId, direction, button) {
         if (result.success) {
             console.log(`Popup: Successfully skipped ${direction} track in tab ${tabId}`);
             // Visual feedback
-            button.textContent = direction === 'prev' ? '⏮️' : '⏭️';
+            button.textContent = direction === 'prev' ? '' : '';
         } else {
             console.error(`Popup: Failed to skip ${direction} track in tab ${tabId}:`, result.error);
             button.textContent = '❌';
@@ -325,7 +325,7 @@ async function skipTrack(tabId, direction, button) {
         // Re-enable button after a short delay
         setTimeout(() => {
             button.disabled = false;
-            button.textContent = direction === 'prev' ? '⏮️' : '⏭️';
+            button.textContent = direction === 'prev' ? '' : '';
         }, 1000);
     }
 }
@@ -346,7 +346,7 @@ async function toggleTabMute(tabId, button) {
         
         if (result.success) {
             // Update button text based on new state
-            button.textContent = result.isMuted ? '🔊 Unmute' : '🔇 Mute';
+            button.textContent = result.isMuted ? 'Unmute' : 'Mute';
             console.log(`Popup: Tab ${tabId} is now ${result.isMuted ? 'muted' : 'unmuted'}`);
         } else {
             console.error(`Popup: Failed to toggle mute for tab ${tabId}:`, result.error);

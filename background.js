@@ -1,6 +1,4 @@
-// Lightweight, event-driven cache of audible tabs
-const audibleTabsMap = new Map(); // tabId -> { id, title, url, audible, muted }
-
+const audibleTabsMap = new Map(); 
 function getAudibleTabs() {
     return Array.from(audibleTabsMap.values());
 }
@@ -26,15 +24,15 @@ function upsertFromTab(tab) {
     }
 }
 
-// Track connected popup ports
+
 const popupPorts = new Set();
 
-// Handle popup connection
+
 browser.runtime.onConnect.addListener(port => {
     if (port.name === 'popup') {
         popupPorts.add(port);
         
-        // Send current state immediately when popup connects
+        
         const tabs = Array.from(audibleTabsMap.values());
         port.postMessage({
             command: 'update_media_tabs',
@@ -47,10 +45,10 @@ browser.runtime.onConnect.addListener(port => {
     }
 });
 
-// Function to push updates to all connected popups
+
 function pushUpdateToPopup() {
     if (popupPorts.size === 0) {
-        return; // No popups are open
+        return; 
     }
     
     const tabs = Array.from(audibleTabsMap.values());
@@ -59,7 +57,7 @@ function pushUpdateToPopup() {
         tabs: tabs
     };
     
-    // Send to all connected popups
+    
     for (const port of popupPorts) {
         try {
             port.postMessage(message);
@@ -70,7 +68,7 @@ function pushUpdateToPopup() {
     }
 }
 
-// Function to update the extension icon and title based on audible tabs count
+
 async function updateIconForMediaTabs() {
     console.log("updateIconForMediaTabs called.");
     const count = getAudibleTabs().length;
@@ -85,9 +83,7 @@ async function updateIconForMediaTabs() {
     }
 }
 
-// --- Event Listeners ---
 
-// 1. Initialize cache on startup and update icon
 browser.runtime.onStartup.addListener(async () => {
     const tabs = await browser.tabs.query({});
     tabs.forEach(t => upsertFromTab(t));
@@ -95,7 +91,7 @@ browser.runtime.onStartup.addListener(async () => {
 });
 browser.windows.onCreated.addListener(updateIconForMediaTabs);
 
-// 2. Listen for tab creation
+
 browser.tabs.onCreated.addListener((tab) => {
     const changed = upsertFromTab(tab);
     if (changed) {
@@ -104,7 +100,7 @@ browser.tabs.onCreated.addListener((tab) => {
     }
 });
 
-// 3. Listen for tab updates (audible, muted, title, url)
+
 browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     let changed = false;
     if (changeInfo.audible !== undefined) {
@@ -126,7 +122,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 }, { properties: ["audible", "mutedInfo", "title", "url"] });
 
-// 4. Handle when a tab is removed
+
 browser.tabs.onRemoved.addListener((tabId) => {
     if (audibleTabsMap.delete(tabId)) {
         updateIconForMediaTabs();
@@ -135,18 +131,18 @@ browser.tabs.onRemoved.addListener((tabId) => {
 });
 
 
-// Message listener for the popup
+
 browser.runtime.onMessage.addListener((message, sender) => {
     if (message.command === "skip_track") {
         console.log(`Background: Received 'skip_track' command for tab ${message.tabId}, direction: ${message.direction}`);
         
-        // First, try to send the message directly (in case content script is already loaded)
+        
         return browser.tabs.sendMessage(message.tabId, {
             command: 'execute_skip_track',
             direction: message.direction
         }).catch(error => {
             console.log('Direct message failed, attempting to inject content script...', error);
-            // If direct message fails, inject the content script and try again
+            
             return browser.tabs.executeScript(message.tabId, {
                 file: '/content/skipTrack.js'
             }).then(() => {
@@ -163,37 +159,36 @@ browser.runtime.onMessage.addListener((message, sender) => {
             if (result && result.success) {
                 console.log(`Successfully skipped ${message.direction} track using method:`, result.method);
                 
-                // Force update the tab information
                 try {
-                    // Get the latest tab info
+                    
                     const tab = await browser.tabs.get(message.tabId);
                     if (tab) {
-                        // Update our cache with the latest tab info
+                        
                         const updateType = upsertFromTab(tab);
                         if (updateType) {
                             console.log(`Tab ${tab.id} ${updateType} in cache`);
                         }
                         
-                        // Force a title update by querying the tab's title
+                        
                         const updatedTab = await browser.tabs.get(message.tabId);
                         if (updatedTab) {
-                            // Update the cache again with the latest title
+                            
                             audibleTabsMap.set(updatedTab.id, {
                                 ...audibleTabsMap.get(updatedTab.id) || {},
                                 title: updatedTab.title,
                                 url: updatedTab.url
                             });
                             
-                            // Push the update to popup
+                            
                             pushUpdateToPopup();
                             
-                            // Request a title update from the content script
+                            
                             try {
                                 await browser.tabs.sendMessage(message.tabId, {
                                     command: 'update_title'
                                 });
                             } catch (e) {
-                                // Content script might not be loaded, that's okay
+                                
                                 console.log('Could not update title via content script:', e);
                             }
                         }
@@ -210,7 +205,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
             return { success: false, error, methodsTried };
         }).catch(error => {
             console.error(`Background: Error in skip_track for tab ${message.tabId}:`, error);
-            // As a last resort, try the direct button click approach
+            
             return browser.tabs.executeScript(message.tabId, {
                 code: `
                     (function() {
@@ -252,7 +247,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
             url: tab.url,
             audible: true,
             muted: tab.muted,
-            // Keep fields popup expects
+
             isPlaying: true,
             isPaused: false,
             mediaCount: 1,
@@ -263,7 +258,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
     if (message.command === "toggle_play_pause") {
         console.log(`Background: Received 'toggle_play_pause' command for tab ${message.tabId}.`);
-        // Execute script in the tab to toggle play/pause
+        
         return browser.tabs.executeScript(message.tabId, {
             code: `
                 (function() {
@@ -305,7 +300,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
                 return { success: true, isMuted: newMuteState };
             });
         }).then(result => {
-            // Reflect mute change in cache and push update
+            
             const tabEntry = audibleTabsMap.get(message.tabId);
             if (tabEntry) {
                 tabEntry.muted = result.isMuted;
@@ -319,7 +314,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
     }
 });
 
-// Immediately initialize cache and set initial icon state
+
 (async function init() {
     const tabs = await browser.tabs.query({});
     tabs.forEach(t => upsertFromTab(t));
