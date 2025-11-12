@@ -14,7 +14,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     </div>
                     <div class="tab-controls">
                         <div class="tab-info"></div>
+                        <button class="control-button prev-btn" data-tab-id="${tab.id}" title="Previous Track">⏮️</button>
                         <button class="control-button pause-btn" data-tab-id="${tab.id}">⏸️ Pause</button>
+                        <button class="control-button next-btn" data-tab-id="${tab.id}" title="Next Track">⏭️</button>
                         <button class="control-button mute-btn" data-tab-id="${tab.id}">🔇 Mute</button>
                     </div>
                 `;
@@ -25,15 +27,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                     window.close();
                 });
 
+                const prevBtn = tabItem.querySelector('.prev-btn');
                 const pauseBtn = tabItem.querySelector('.pause-btn');
+                const nextBtn = tabItem.querySelector('.next-btn');
                 const muteBtn = tabItem.querySelector('.mute-btn');
 
                 pauseBtn.textContent = tab.isPlaying ? '⏸️ Pause' : '▶️ Play';
                 muteBtn.textContent = tab.muted ? '🔊 Unmute' : '🔇 Mute';
 
+                prevBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await skipTrack(tab.id, 'prev', prevBtn);
+                });
                 pauseBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     await toggleTabPlayPause(tab.id, pauseBtn);
+                });
+                nextBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await skipTrack(tab.id, 'next', nextBtn);
                 });
                 muteBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
@@ -119,6 +131,41 @@ async function toggleTabPlayPause(tabId, button) {
         // Re-enable button after a short delay
         setTimeout(() => {
             button.disabled = false;
+        }, 1000);
+    }
+}
+
+// Function to skip to previous/next track in a tab
+async function skipTrack(tabId, direction, button) {
+    try {
+        console.log(`Popup: Skipping ${direction} track for tab ${tabId}`);
+        
+        // Disable button temporarily to prevent multiple clicks
+        button.disabled = true;
+        button.textContent = '⏳';
+        
+        const result = await browser.runtime.sendMessage({ 
+            command: "skip_track", 
+            tabId: tabId,
+            direction: direction
+        });
+        
+        if (result.success) {
+            console.log(`Popup: Successfully skipped ${direction} track in tab ${tabId}`);
+            // Visual feedback
+            button.textContent = direction === 'prev' ? '⏮️' : '⏭️';
+        } else {
+            console.error(`Popup: Failed to skip ${direction} track in tab ${tabId}:`, result.error);
+            button.textContent = '❌';
+        }
+    } catch (error) {
+        console.error(`Popup: Error skipping ${direction} track in tab ${tabId}:`, error);
+        button.textContent = '❌';
+    } finally {
+        // Re-enable button after a short delay
+        setTimeout(() => {
+            button.disabled = false;
+            button.textContent = direction === 'prev' ? '⏮️' : '⏭️';
         }, 1000);
     }
 }

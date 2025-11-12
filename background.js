@@ -102,6 +102,40 @@ browser.tabs.onRemoved.addListener((tabId) => {
 
 // Message listener for the popup
 browser.runtime.onMessage.addListener((message, sender) => {
+    if (message.command === "skip_track") {
+        console.log(`Background: Received 'skip_track' command for tab ${message.tabId}, direction: ${message.direction}`);
+        
+        // First, try to inject and execute our content script
+        return browser.tabs.executeScript(message.tabId, {
+            file: '/content/skipTrack.js'
+        }).then(() => {
+            // Now execute the skipTrack function
+            return browser.tabs.executeScript(message.tabId, {
+                code: `skipTrack('${message.direction}');`
+            });
+        }).then(results => {
+            if (results && results[0] && results[0].success) {
+                console.log(`Successfully skipped ${message.direction} track using method:`, results[0].method);
+                return { success: true, method: results[0].method };
+            }
+            const error = results && results[0] ? results[0].error : 'Unknown error';
+            const methodsTried = results && results[0] ? results[0].methodsTried : [];
+            console.error(`Failed to skip ${message.direction} track:`, error, 'Methods tried:', methodsTried);
+            return { 
+                success: false, 
+                error: error,
+                methodsTried: methodsTried
+            };
+        }).catch(error => {
+            console.error(`Background: Error executing skip_track in tab ${message.tabId}:`, error);
+            return { 
+                success: false, 
+                error: error.message,
+                method: 'error'
+            };
+        });
+    }
+
     if (message.command === "get_media_tabs") {
         console.log("Background: Received 'get_media_tabs' command from popup.");
         const tabsData = getAudibleTabs().map(tab => ({
