@@ -1,33 +1,9 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const tabsContainer = document.getElementById('tabs-container');
-    
-    try {
-        console.log("Popup: Sending message to background script for media tabs.");
-        
-        // Add timeout to prevent hanging
-        const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => {
-                console.log("Popup: Timeout reached, showing timeout message");
-                reject(new Error('Timeout'));
-            }, 10000); // 10 second timeout
-        });
-        
-        const mediaTabsPromise = browser.runtime.sendMessage({ command: "get_media_tabs" });
-        console.log("Popup: Message sent, waiting for response...");
-        
-        const mediaTabs = await Promise.race([mediaTabsPromise, timeoutPromise]);
-        console.log("Popup: Received response from background script (mediaTabs):", mediaTabs);
-        console.log("Popup: Type of mediaTabs:", typeof mediaTabs);
-        console.log("Popup: Is array:", Array.isArray(mediaTabs));
-        console.log("Popup: Length:", mediaTabs ? mediaTabs.length : 'undefined');
-        
+
+    function renderTabs(mediaTabs) {
         if (mediaTabs && mediaTabs.length > 0) {
-            console.log(`Popup: Displaying ${mediaTabs.length} tabs with media.`);
-            
-            // Clear loading message
             tabsContainer.innerHTML = '';
-            
-            // Create tab items
             mediaTabs.forEach(tab => {
                 const tabItem = document.createElement('div');
                 tabItem.className = 'tab-item';
@@ -42,57 +18,69 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <button class="control-button mute-btn" data-tab-id="${tab.id}">🔇 Mute</button>
                     </div>
                 `;
-                
-                // Add click handler to switch to the tab (only on tab content, not controls)
+
                 const tabContent = tabItem.querySelector('.tab-content');
                 tabContent.addEventListener('click', () => {
                     browser.tabs.update(tab.id, { active: true });
-                    window.close(); // Close the popup after switching
+                    window.close();
                 });
-                
-                // Add click handlers for control buttons
+
                 const pauseBtn = tabItem.querySelector('.pause-btn');
                 const muteBtn = tabItem.querySelector('.mute-btn');
-                
-                // Initialize button states based on actual media state
-                if (tab.isPlaying) {
-                    pauseBtn.textContent = '⏸️ Pause';
-                } else if (tab.isPaused) {
-                    pauseBtn.textContent = '▶️ Play';
-                } else {
-                    pauseBtn.textContent = '▶️ Play';
-                }
-                
-                if (tab.muted) {
-                    muteBtn.textContent = '🔊 Unmute';
-                } else {
-                    muteBtn.textContent = '🔇 Mute';
-                }
-                
+
+                pauseBtn.textContent = tab.isPlaying ? '⏸️ Pause' : '▶️ Play';
+                muteBtn.textContent = tab.muted ? '🔊 Unmute' : '🔇 Mute';
+
                 pauseBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     await toggleTabPlayPause(tab.id, pauseBtn);
                 });
-                
                 muteBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     await toggleTabMute(tab.id, muteBtn);
                 });
-                
+
                 tabsContainer.appendChild(tabItem);
             });
         } else {
-            console.log("Popup: No tabs with media found.");
             tabsContainer.innerHTML = '<div class="no-tabs">🔇 No tabs with media found</div>';
         }
+    }
+
+    try {
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Timeout')), 5000);
+        });
+        const mediaTabs = await Promise.race([
+            browser.runtime.sendMessage({ command: 'get_media_tabs' }),
+            timeoutPromise,
+        ]);
+        renderTabs(mediaTabs);
     } catch (error) {
-        console.error("Popup: Error sending or receiving message:", error);
+        console.error('Popup: initial load error', error);
         if (error.message === 'Timeout') {
             tabsContainer.innerHTML = '<div class="no-tabs">⏰ Loading timeout - try refreshing</div>';
         } else {
             tabsContainer.innerHTML = '<div class="no-tabs">❌ Error loading tabs</div>';
         }
     }
+
+    // Listen for push updates from background
+    browser.runtime.onMessage.addListener((message) => {
+        if (message && message.command === 'audible_tabs_changed') {
+            // Adapt pushed schema to popup schema
+            const tabs = (message.tabs || []).map(t => ({
+                id: t.id,
+                title: t.title,
+                url: t.url,
+                muted: !!t.muted,
+                isPlaying: true,
+                isPaused: false,
+                mediaCount: 1,
+            }));
+            renderTabs(tabs);
+        }
+    });
 });
 
 // Helper function to escape HTML characters
