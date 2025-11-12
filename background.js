@@ -105,34 +105,67 @@ browser.runtime.onMessage.addListener((message, sender) => {
     if (message.command === "skip_track") {
         console.log(`Background: Received 'skip_track' command for tab ${message.tabId}, direction: ${message.direction}`);
         
-        // First, try to inject and execute our content script
-        return browser.tabs.executeScript(message.tabId, {
-            file: '/content/skipTrack.js'
-        }).then(() => {
-            // Now execute the skipTrack function
-            return browser.tabs.executeScript(message.tabId, {
-                code: `skipTrack('${message.direction}');`
-            });
-        }).then(results => {
-            if (results && results[0] && results[0].success) {
-                console.log(`Successfully skipped ${message.direction} track using method:`, results[0].method);
-                return { success: true, method: results[0].method };
-            }
-            const error = results && results[0] ? results[0].error : 'Unknown error';
-            const methodsTried = results && results[0] ? results[0].methodsTried : [];
-            console.error(`Failed to skip ${message.direction} track:`, error, 'Methods tried:', methodsTried);
-            return { 
-                success: false, 
-                error: error,
-                methodsTried: methodsTried
-            };
+        // First, try to send the message directly (in case content script is already loaded)
+        return browser.tabs.sendMessage(message.tabId, {
+            command: 'execute_skip_track',
+            direction: message.direction
         }).catch(error => {
-            console.error(`Background: Error executing skip_track in tab ${message.tabId}:`, error);
-            return { 
-                success: false, 
-                error: error.message,
-                method: 'error'
-            };
+            console.log('Direct message failed, attempting to inject content script...', error);
+            // If direct message fails, inject the content script and try again
+            return browser.tabs.executeScript(message.tabId, {
+                file: '/content/skipTrack.js'
+            }).then(() => {
+                console.log('Content script injected, sending message...');
+                return browser.tabs.sendMessage(message.tabId, {
+                    command: 'execute_skip_track',
+                    direction: message.direction
+                });
+            }).catch(injectError => {
+                console.error('Failed to inject content script:', injectError);
+                throw new Error('Failed to inject content script: ' + injectError.message);
+            });
+        }).then(result => {
+            if (result && result.success) {
+                console.log(`Successfully skipped ${message.direction} track using method:`, result.method);
+                return { success: true, method: result.method };
+            }
+            const error = result?.error || 'No supported track skipping method found';
+            const methodsTried = result?.methodsTried || [];
+            console.error(`Failed to skip ${message.direction} track:`, error, 'Methods tried:', methodsTried);
+            return { success: false, error, methodsTried };
+        }).catch(error => {
+            console.error(`Background: Error in skip_track for tab ${message.tabId}:`, error);
+            // As a last resort, try the direct button click approach
+            return browser.tabs.executeScript(message.tabId, {
+                code: `
+                    (function() {
+                        try {
+                            const direction = '${message.direction}';
+                            const selectors = direction === 'next' ? 
+                                ['.ytp-next-button', '.next', '.skip-next', '[data-testid="next"]'] :
+                                ['.ytp-prev-button', '.previous', '.skip-previous', '[data-testid="previous"]'];
+                            
+                            for (const selector of selectors) {
+                                const button = document.querySelector(selector);
+                                if (button && button.offsetParent !== null) {
+                                    button.click();
+                                    return { success: true, method: 'direct-button-click' };
+                                }
+                            }
+                            return { success: false, error: 'No skip buttons found' };
+                        } catch (e) {
+                            return { success: false, error: e.message };
+                        }
+                    })();
+                `
+            }).then(results => {
+                const result = results && results[0];
+                if (result && result.success) {
+                    console.log(`Successfully skipped ${message.direction} track using fallback method:`, result.method);
+                    return { success: true, method: result.method };
+                }
+                throw new Error(result?.error || 'All skip methods failed');
+            });
         });
     }
 

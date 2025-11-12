@@ -4,9 +4,12 @@
   "version": "1.0",
   "description": "Lists all tabs with media and provides play/pause/mute controls.",
   "permissions": [
-    "tabs",           
+    "tabs",
     "activeTab",
     "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    "content/*"
   ],
   "browser_action": {
     "default_popup": "popup/popup.html",
@@ -19,6 +22,14 @@
   "background": {
     "scripts": ["background.js"]
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/skipTrack.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
   "icons": {
     "48": "icons/icon-48.png"
   }

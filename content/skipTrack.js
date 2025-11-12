@@ -1,28 +1,65 @@
+// Cache DOM elements for better performance
+const cache = {
+    mediaElements: null,
+    lastUpdate: 0,
+    CACHE_DURATION: 1000 // 1 second cache
+};
+
+function getMediaElements() {
+    const now = Date.now();
+    if (!cache.mediaElements || (now - cache.lastUpdate) > cache.CACHE_DURATION) {
+        cache.mediaElements = Array.from(document.querySelectorAll('audio, video'));
+        cache.lastUpdate = now;
+    }
+    return cache.mediaElements;
+}
+
 function skipTrack(direction) {
     const isNext = direction === 'next';
     let success = false;
     
+    // Get media elements with track support
+    const mediaElements = getMediaElements();
+    const mediaWithTracks = [];
+    
+    // Only check for track support if we haven't found a better method yet
+    for (const media of mediaElements) {
+        if ((direction === 'next' && media.nextTrack) || 
+            (direction === 'prev' && media.previousTrack) ||
+            (media.audioTracks && media.audioTracks.length > 1)) {
+            mediaWithTracks.push(media);
+        }
+    }
+    
     // 1. First try to find and click next/previous buttons in the page
-    const buttonSelectors = [
-        isNext ? 
-            ['button[title*="next" i]', 'button[aria-label*="next" i]', '.next', '.next-button', '.skip-button', '.skip-forward'] :
-            ['button[title*="previous" i]', 'button[aria-label*="previous" i]', '.prev', '.previous', '.previous-button', '.skip-back'],
-        
-        // Common video player controls
-        isNext ? 
-            ['.ytp-next-button', '.ytp-next-arrow', '.video-next-button'] :
-            ['.ytp-prev-button', '.ytp-prev-arrow', '.video-prev-button'],
-        
-        // Spotify and music players
-        isNext ? 
-            ['.spoticon-skip-forward', '.skip-control__next', '.player-controls__next'] :
-            ['.spoticon-skip-back', '.skip-control__previous', '.player-controls__previous'],
-        
-        // Generic media controls
-        isNext ? 
-            ['[data-testid="control-button-skip-forward"]', '[data-testid="next"]'] :
-            ['[data-testid="control-button-skip-back"]', '[data-testid="previous"]']
-    ].flat();
+    const commonButtonSelectors = {
+        next: [
+            // YouTube
+            '.ytp-next-button', '.ytp-next-arrow',
+            // Spotify
+            '.spoticon-skip-forward',
+            // Generic
+            '[data-testid="control-button-skip-forward"]',
+            '[data-testid="next"]',
+            'button[title*="next" i]',
+            'button[aria-label*="next" i]',
+            '.next', '.next-button', '.skip-forward'
+        ],
+        prev: [
+            // YouTube
+            '.ytp-prev-button', '.ytp-prev-arrow',
+            // Spotify
+            '.spoticon-skip-back',
+            // Generic
+            '[data-testid="control-button-skip-back"]',
+            '[data-testid="previous"]',
+            'button[title*="previous" i]',
+            'button[aria-label*="previous" i]',
+            '.prev', '.previous', '.previous-button', '.skip-back'
+        ]
+    };
+    
+    const buttonSelectors = commonButtonSelectors[direction] || [];
     
     // Try to find and click the most likely button
     for (const selector of buttonSelectors) {
@@ -102,7 +139,27 @@ function skipTrack(direction) {
         console.log('Error accessing player APIs:', e);
     }
     
-    // 4. As a last resort, try to simulate keyboard events
+    // 4. Try to find and click buttons in the page
+    for (const selector of buttonSelectors) {
+        const button = document.querySelector(selector);
+        if (button) {
+            const style = window.getComputedStyle(button);
+            if (style.display !== 'none' && 
+                style.visibility !== 'hidden' && 
+                style.opacity !== '0' &&
+                button.offsetWidth > 0 && 
+                button.offsetHeight > 0) {
+                try {
+                    button.click();
+                    return { success: true, method: 'button-click' };
+                } catch (e) {
+                    console.log('Error clicking button:', e);
+                }
+            }
+        }
+    }
+
+    // 5. As a last resort, try to simulate keyboard events
     try {
         const keyCode = isNext ? 176 : 177; // Next track: 176, Previous track: 177
         const event = new KeyboardEvent('keydown', {
@@ -141,3 +198,22 @@ function skipTrack(direction) {
         methodsTried: ['button-click', 'media-session', 'player-api', 'keyboard-events']
     };
 }
+
+// Add message listener to handle skip track commands from the background script
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.command === 'execute_skip_track') {
+        try {
+            const result = skipTrack(message.direction);
+            sendResponse(result);
+        } catch (error) {
+            console.error('Error in skipTrack:', error);
+            sendResponse({
+                success: false,
+                error: error.message,
+                method: 'error'
+            });
+        }
+        return true; // Keep the message channel open for async response
+    }
+    return false;
+});
