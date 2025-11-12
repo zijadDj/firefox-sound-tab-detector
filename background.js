@@ -1,27 +1,50 @@
-const audibleTabsMap = new Map(); 
+const audibleTabsMap = new Map();
+const TAB_RETENTION_MS = 30 * 60 * 1000; // Keep tabs for 30 minutes after they stop playing
+
 function getAudibleTabs() {
-    return Array.from(audibleTabsMap.values());
+    // Clean up old tabs before returning the list
+    cleanupOldTabs();
+    return Array.from(audibleTabsMap.values())
+        .filter(tab => tab.audible || (Date.now() - tab.lastActive) < TAB_RETENTION_MS);
+}
+
+function cleanupOldTabs() {
+    const now = Date.now();
+    for (const [id, tab] of audibleTabsMap.entries()) {
+        if (!tab.audible && (now - tab.lastActive) >= TAB_RETENTION_MS) {
+            audibleTabsMap.delete(id);
+        }
+    }
 }
 
 function upsertFromTab(tab) {
     if (!tab || tab.id == null) return false;
+    
+    const now = Date.now();
     const was = audibleTabsMap.has(tab.id);
+    
     if (tab.audible) {
+        // Update or add tab that's currently playing
         audibleTabsMap.set(tab.id, {
             id: tab.id,
             title: tab.title || tab.url || `Tab ${tab.id}`,
             url: tab.url || '',
             audible: true,
             muted: !!(tab.mutedInfo && tab.mutedInfo.muted),
+            lastActive: now
         });
         return was ? 'updated' : 'added';
-    } else {
-        if (was) {
-            audibleTabsMap.delete(tab.id);
-            return 'removed';
+    } else if (was) {
+        // Tab was playing before but isn't now - mark as inactive but keep it
+        const existingTab = audibleTabsMap.get(tab.id);
+        if (existingTab) {
+            existingTab.audible = false;
+            // Only update lastActive if it's not already set
+            existingTab.lastActive = existingTab.lastActive || now;
         }
-        return false;
+        return 'updated';
     }
+    return false;
 }
 
 
@@ -51,12 +74,17 @@ function pushUpdateToPopup() {
         return; 
     }
     
-    const tabs = Array.from(audibleTabsMap.values());
+    // Get the latest tab states
+    const tabs = Array.from(audibleTabsMap.values()).map(tab => ({
+        ...tab,
+        // Ensure we have the latest play state
+        isPlaying: tab.audible
+    }));
+    
     const message = {
         command: 'update_media_tabs',
         tabs: tabs
     };
-    
     
     for (const port of popupPorts) {
         try {
@@ -84,11 +112,15 @@ async function updateIconForMediaTabs() {
 }
 
 
+// Clean up old tabs every 5 minutes
+setInterval(cleanupOldTabs, 5 * 60 * 1000);
+
 browser.runtime.onStartup.addListener(async () => {
     const tabs = await browser.tabs.query({});
     tabs.forEach(t => upsertFromTab(t));
     updateIconForMediaTabs();
 });
+
 browser.windows.onCreated.addListener(updateIconForMediaTabs);
 
 
@@ -133,6 +165,59 @@ browser.tabs.onRemoved.addListener((tabId) => {
 
 
 browser.runtime.onMessage.addListener((message, sender) => {
+    // Handle play/pause toggle
+    if (message.command === "toggle_play_pause") {
+        console.log(`Background: Received 'toggle_play_pause' command for tab ${message.tabId}.`);
+        
+        // Update our local state first
+        const tab = audibleTabsMap.get(message.tabId);
+        if (tab) {
+            tab.lastActive = Date.now();
+            // We'll update the audible state when we get the result from the content script
+        }
+        
+        return browser.tabs.executeScript(message.tabId, {
+            code: `
+                (function() {
+                    var mediaElements = document.querySelectorAll('audio, video');
+                    var foundPlaying = false;
+                    mediaElements.forEach(function(media) {
+                        if (!media.paused) {
+                            foundPlaying = true;
+                            media.pause();
+                        } else if (media.currentTime > 0) {
+                            foundPlaying = true;
+                            media.play();
+                        }
+                    });
+                    
+                    if (!foundPlaying && mediaElements.length > 0) {
+                        // If no media was playing, start the first one
+                        mediaElements[0].play();
+                        foundPlaying = true;
+                    }
+                    
+                    return { success: true, isPlaying: !foundPlaying };
+                })();
+            `
+        }).then(([result]) => {
+            console.log(`Background: Successfully toggled play/pause for tab ${message.tabId}.`);
+            
+            // Update our local state with the actual result from the content script
+            const tab = audibleTabsMap.get(message.tabId);
+            if (tab) {
+                tab.audible = result.isPlaying;
+                tab.lastActive = Date.now();
+                pushUpdateToPopup();
+            }
+            
+            return result;
+        }).catch(error => {
+            console.error(`Background: Error toggling play/pause for tab ${message.tabId}:`, error);
+            return { success: false, error: error.message };
+        });
+    }
+    
     if (message.command === "skip_track") {
         console.log(`Background: Received 'skip_track' command for tab ${message.tabId}, direction: ${message.direction}`);
         
@@ -258,6 +343,13 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
     if (message.command === "toggle_play_pause") {
         console.log(`Background: Received 'toggle_play_pause' command for tab ${message.tabId}.`);
+        
+        // Update our local state first
+        const tab = audibleTabsMap.get(message.tabId);
+        if (tab) {
+            tab.lastActive = Date.now();
+            // We'll update the audible state when we get the result from the content script
+        }
         
         return browser.tabs.executeScript(message.tabId, {
             code: `

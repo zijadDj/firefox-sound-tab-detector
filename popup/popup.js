@@ -105,7 +105,19 @@ function connectToBackground() {
         
         backgroundPort.onMessage.addListener((message) => {
             if (message.command === 'update_media_tabs' && message.tabs) {
-                updateTabs(message.tabs);
+                // Update our local state with the latest tab information
+                if (message.tabs && Array.isArray(message.tabs)) {
+                    // Update the currentTabs array with the new state
+                    currentTabs = message.tabs.map(tab => ({
+                        ...tab,
+                        // Ensure we have all required properties
+                        isPlaying: tab.isPlaying || tab.audible,
+                        muted: tab.muted || false
+                    }));
+                    
+                    // Re-render the tabs with the updated state
+                    renderTabs(currentTabs);
+                }
             }
         });
         
